@@ -1,10 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import styled, { keyframes, createGlobalStyle } from 'styled-components';
 import { 
-  Upload, Building, Phone, Mail, Globe, 
+  Upload, Building, Phone, 
   Plus, Trash2, Package, Hash, DollarSign, Percent,
-  Printer, Download, ArrowRight
+  Printer, Download, ArrowRight, ChevronsUpDown, Loader
 } from 'lucide-react';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
+
 
 // Reusable SVG Logo Component
 const Logo = ({ size = 80 }) => (
@@ -34,6 +37,15 @@ const slideDown = keyframes`
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+`;
+
+const spinAnimation = keyframes`
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
   }
 `;
 
@@ -156,6 +168,24 @@ const Input = styled.input`
   }
 `;
 
+const Select = styled.select`
+  width: 100%;
+  padding: 1rem 1rem 1rem 2.5rem;
+  border: none;
+  border-bottom: 2px solid #ccc;
+  background-color: transparent;
+  font-size: 1rem;
+  color: #1c1c1c;
+  appearance: none;
+  cursor: pointer;
+
+  &:focus {
+    outline: none;
+    border-bottom-color: #7c3aed;
+  }
+`;
+
+
 const InputWrapper = styled.div`
   position: relative;
   
@@ -165,6 +195,11 @@ const InputWrapper = styled.div`
     top: 50%;
     transform: translateY(-50%);
     color: #999;
+  }
+  
+  .select-arrow {
+    right: 0;
+    left: auto;
   }
 `;
 
@@ -239,6 +274,18 @@ const ItemRow = styled.div`
     padding: 1rem;
     border-radius: 8px;
     background-color: #e9e8e5;
+  }
+`;
+
+const TotalsRow = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 1rem;
+  align-items: center;
+
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
   }
 `;
 
@@ -322,6 +369,16 @@ const ActionButton = styled.button`
       border-color: #d1d0cd;
     }
   }
+  
+  &:disabled {
+    background-color: #999;
+    border-color: #999;
+    cursor: not-allowed;
+  }
+`;
+
+const AnimatedLoader = styled(Loader)`
+  animation: ${spinAnimation} 1s linear infinite;
 `;
 
 // --- Preview Panel Styles ---
@@ -400,24 +457,86 @@ const TotalRow = styled.div`
   }
 `;
 
+const ToggleSwitchWrapper = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  
+  label {
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+`;
+
+const Switch = styled.label`
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+
+  input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+
+  span {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: .4s;
+    border-radius: 34px;
+
+    &:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .4s;
+      border-radius: 50%;
+    }
+  }
+
+  input:checked + span {
+    background-color: #7c3aed;
+  }
+
+  input:checked + span:before {
+    transform: translateX(20px);
+  }
+`;
+
 // --- The Main Editor Component ---
 const ReceiptEditor = () => {
+  const [isDownloading, setIsDownloading] = useState(false);
   const [receipt, setReceipt] = useState({
     brandName: 'Your Brand',
     logo: null,
     address: '123 Main Street, Anytown',
     phone: '(123) 456-7890',
-    email: 'contact@yourbrand.com',
-    website: 'yourbrand.com',
     items: [{ id: 1, name: 'Sample Item', quantity: 2, price: 12.50 }],
-    taxRate: 8,
+    taxRate: 15,
+    vatRate: 2.5,
     discount: 5,
-    currency: '$'
+    currency: 'GH₵',
+    totalOverride: '',
+    isManualTotal: false,
   });
 
   const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setReceipt(prev => ({ ...prev, [name]: value }));
+    const { name, value, type, checked } = e.target;
+    setReceipt(prev => ({ 
+        ...prev, 
+        [name]: type === 'checkbox' ? checked : value 
+    }));
   };
 
   const handleLogoUpload = (e) => {
@@ -459,7 +578,25 @@ const ReceiptEditor = () => {
   };
 
   const handleDownloadPDF = () => {
-    alert('PDF download functionality is in development!');
+    setIsDownloading(true);
+    const input = document.getElementById('receipt-preview-content');
+    
+    html2canvas(input, { scale: 2, useCORS: true })
+      .then((canvas) => {
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jsPDF({
+          orientation: 'portrait',
+          unit: 'pt',
+          format: [canvas.width * 0.75, canvas.height * 0.75] // A bit of scaling
+        });
+        pdf.addImage(imgData, 'PNG', 0, 0, canvas.width * 0.75, canvas.height * 0.75);
+        pdf.save(`receipt-${Date.now()}.pdf`);
+        setIsDownloading(false);
+      })
+      .catch(err => {
+        console.error("Error generating PDF", err);
+        setIsDownloading(false);
+      });
   };
 
   const subtotal = useMemo(() => 
@@ -468,14 +605,23 @@ const ReceiptEditor = () => {
   );
 
   const taxAmount = useMemo(() => 
-    subtotal * (receipt.taxRate / 100),
+    subtotal * (parseFloat(receipt.taxRate) / 100),
     [subtotal, receipt.taxRate]
+  );
+  
+  const vatAmount = useMemo(() => 
+    subtotal * (parseFloat(receipt.vatRate) / 100),
+    [subtotal, receipt.vatRate]
   );
 
   const grandTotal = useMemo(() => 
-    subtotal + taxAmount - receipt.discount,
-    [subtotal, taxAmount, receipt.discount]
+    subtotal + taxAmount + vatAmount - parseFloat(receipt.discount),
+    [subtotal, taxAmount, vatAmount, receipt.discount]
   );
+  
+  const finalTotal = receipt.isManualTotal && receipt.totalOverride !== ''
+    ? parseFloat(receipt.totalOverride)
+    : grandTotal;
 
   return (
     <>
@@ -542,14 +688,14 @@ const ReceiptEditor = () => {
                   <FormGroup style={{marginBottom: 0}}>
                     <InputWrapper>
                       <Hash size={18} />
-                      <Input type="number" value={item.quantity} onChange={(e) => handleItemChange(item.id, 'quantity', parseFloat(e.target.value))} placeholder=" " />
+                      <Input type="number" value={item.quantity} onChange={(e) => handleItemChange(item.id, 'quantity', parseFloat(e.target.value) || 0)} placeholder=" " />
                       <FloatingLabel>Qty</FloatingLabel>
                     </InputWrapper>
                   </FormGroup>
                   <FormGroup style={{marginBottom: 0}}>
                     <InputWrapper>
                       <DollarSign size={18} />
-                      <Input type="number" value={item.price} onChange={(e) => handleItemChange(item.id, 'price', parseFloat(e.target.value))} placeholder=" " />
+                      <Input type="number" value={item.price} onChange={(e) => handleItemChange(item.id, 'price', parseFloat(e.target.value) || 0)} placeholder=" " />
                       <FloatingLabel>Price</FloatingLabel>
                     </InputWrapper>
                   </FormGroup>
@@ -565,14 +711,21 @@ const ReceiptEditor = () => {
           <FormSection>
             <SectionHeader>
               <SectionNumber>3</SectionNumber>
-              <SectionTitle>Totals & Currency</SectionTitle>
+              <SectionTitle>Taxes & Totals</SectionTitle>
             </SectionHeader>
-            <ItemRow>
+            <TotalsRow>
                 <FormGroup style={{marginBottom: 0}}>
                     <InputWrapper>
                         <Percent size={18} />
                         <Input type="number" name="taxRate" value={receipt.taxRate} onChange={handleInputChange} placeholder=" " />
-                        <FloatingLabel>Tax Rate (%)</FloatingLabel>
+                        <FloatingLabel>Tax/VAT (%)</FloatingLabel>
+                    </InputWrapper>
+                </FormGroup>
+                <FormGroup style={{marginBottom: 0}}>
+                    <InputWrapper>
+                        <Percent size={18} />
+                        <Input type="number" name="vatRate" value={receipt.vatRate} onChange={handleInputChange} placeholder=" " />
+                        <FloatingLabel>Levy/NHIL (%)</FloatingLabel>
                     </InputWrapper>
                 </FormGroup>
                 <FormGroup style={{marginBottom: 0}}>
@@ -582,14 +735,37 @@ const ReceiptEditor = () => {
                         <FloatingLabel>Discount</FloatingLabel>
                     </InputWrapper>
                 </FormGroup>
+            </TotalsRow>
+            <TotalsRow>
                 <FormGroup style={{marginBottom: 0}}>
                     <InputWrapper>
                         <DollarSign size={18} />
-                        <Input name="currency" value={receipt.currency} onChange={handleInputChange} placeholder=" " />
-                        <FloatingLabel>Currency</FloatingLabel>
+                        <Select name="currency" value={receipt.currency} onChange={handleInputChange}>
+                            <option value="GH₵">GH₵ (Ghana Cedi)</option>
+                            <option value="$">$ (US Dollar)</option>
+                            <option value="€">€ (Euro)</option>
+                            <option value="£">£ (British Pound)</option>
+                        </Select>
+                        <ChevronsUpDown size={18} className="select-arrow" />
                     </InputWrapper>
                 </FormGroup>
-            </ItemRow>
+                <ToggleSwitchWrapper>
+                    <label htmlFor="isManualTotal">Override Total</label>
+                    <Switch>
+                        <input type="checkbox" id="isManualTotal" name="isManualTotal" checked={receipt.isManualTotal} onChange={handleInputChange} />
+                        <span></span>
+                    </Switch>
+                </ToggleSwitchWrapper>
+                {receipt.isManualTotal && (
+                    <FormGroup style={{marginBottom: 0}}>
+                        <InputWrapper>
+                            <DollarSign size={18} />
+                            <Input type="number" name="totalOverride" value={receipt.totalOverride} onChange={handleInputChange} placeholder=" " />
+                            <FloatingLabel>Manual Total</FloatingLabel>
+                        </InputWrapper>
+                    </FormGroup>
+                )}
+            </TotalsRow>
           </FormSection>
 
           {/* Finalize & Export Section */}
@@ -599,8 +775,11 @@ const ReceiptEditor = () => {
               <SectionTitle>Finalize & Export</SectionTitle>
             </SectionHeader>
             <ActionPanel>
-                <ActionButton onClick={handlePrint}><Printer size={18}/> Print Receipt</ActionButton>
-                <ActionButton className="secondary" onClick={handleDownloadPDF}><Download size={18}/> Download as PDF</ActionButton>
+                <ActionButton onClick={handlePrint} disabled={isDownloading}><Printer size={18}/> Print Receipt</ActionButton>
+                <ActionButton className="secondary" onClick={handleDownloadPDF} disabled={isDownloading}>
+                  {isDownloading ? <AnimatedLoader size={18}/> : <Download size={18}/>}
+                  {isDownloading ? 'Downloading...' : 'Download as PDF'}
+                </ActionButton>
             </ActionPanel>
           </FormSection>
 
@@ -608,7 +787,7 @@ const ReceiptEditor = () => {
 
         <PreviewPanel>
           <ReceiptPreviewContainer id="receipt-preview">
-            <ReceiptPreview>
+            <ReceiptPreview id="receipt-preview-content">
               <ReceiptHeader>
                 {receipt.logo ? <img src={receipt.logo} alt="Brand Logo" width="80" /> : <Logo size={60} />}
                 <BrandName>{receipt.brandName}</BrandName>
@@ -628,8 +807,12 @@ const ReceiptEditor = () => {
                   <span>{receipt.currency}{subtotal.toFixed(2)}</span>
                 </TotalRow>
                 <TotalRow>
-                  <span>Tax ({receipt.taxRate}%)</span>
+                  <span>Tax/VAT ({receipt.taxRate}%)</span>
                   <span>{receipt.currency}{taxAmount.toFixed(2)}</span>
+                </TotalRow>
+                 <TotalRow>
+                  <span>Levy/NHIL ({receipt.vatRate}%)</span>
+                  <span>{receipt.currency}{vatAmount.toFixed(2)}</span>
                 </TotalRow>
                 {receipt.discount > 0 && (
                   <TotalRow>
@@ -639,7 +822,7 @@ const ReceiptEditor = () => {
                 )}
                 <TotalRow className="grand-total">
                   <span>Total</span>
-                  <span>{receipt.currency}{grandTotal.toFixed(2)}</span>
+                  <span>{receipt.currency}{finalTotal.toFixed(2)}</span>
                 </TotalRow>
               </ReceiptFooter>
             </ReceiptPreview>
