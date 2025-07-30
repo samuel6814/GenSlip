@@ -1,4 +1,4 @@
-# 🧾 GenSlip — Smart, Custom Receipt Generator
+# 🧾 GenSlip : Smart, Custom Receipt Generator
 
 **GenSlip** is a lightweight, customizable receipt generator built with **React**, **Vite**, and **styled-components**. Designed for makers, freelancers, and small businesses, it allows you to quickly generate and print clean, professional-looking receipts with custom branding and smart totals.
 
