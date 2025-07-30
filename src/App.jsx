@@ -1,6 +1,7 @@
 import styled from "styled-components";
 import Hero from "./Components/Hero";
 import Footer from "./Components/Footer";
+import ReceiptEditor from "./Components/ReceiptEditor";
 
 
 const Container = styled.div`
@@ -26,6 +27,10 @@ const App = () => {
       
   <Section>
     <Hero/>
+  </Section>
+
+  <Section>
+    <ReceiptEditor/>
   </Section>
 
   <Section>

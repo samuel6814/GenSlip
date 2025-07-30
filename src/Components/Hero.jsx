@@ -1,5 +1,5 @@
 import React from 'react';
-import Navbar from './Navbar';
+import Navbar from './Navbar'; // Assuming Navbar.jsx is in the same folder
 import styled, { keyframes } from 'styled-components';
 import { ArrowRight, FileText, CheckCircle, Zap } from 'lucide-react';
 
@@ -30,6 +30,14 @@ const spin = keyframes`
   }
 `;
 
+// NEW: Keyframe for the highlighted text
+const textFloat = keyframes`
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+  100% { transform: translateY(0px); }
+`;
+
+
 // Styled Components
 const HeroWrapper = styled.section`
   display: flex;
@@ -37,7 +45,7 @@ const HeroWrapper = styled.section`
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  background: #f8f7f4; // A clean, off-white background
+  background: #e2e1de; // A clean, off-white background
   color: #1c1c1c;
   padding: 2rem;
   overflow: hidden;
@@ -85,6 +93,10 @@ const HighlightedText = styled.span`
   padding: 0.2em 0.5em;
   border-radius: 30px;
   margin-left: 0.2em;
+  
+  // UPDATED: Added animation
+  animation: ${textFloat} 4s ease-in-out infinite;
+  animation-delay: 1s; // Start after the initial fade-in
 
   @media (max-width: 768px) {
     border-radius: 20px;
