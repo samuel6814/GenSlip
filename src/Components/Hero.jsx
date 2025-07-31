@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import Navbar from './Navbar'; // Assuming Navbar.jsx is in the same folder
 import styled, { keyframes } from 'styled-components';
 import { ArrowRight, FileText, CheckCircle, Zap } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 // Keyframes for animations
 const fadeInUp = keyframes`
@@ -30,11 +31,21 @@ const spin = keyframes`
   }
 `;
 
-// NEW: Keyframe for the highlighted text
 const textFloat = keyframes`
   0% { transform: translateY(0px); }
   50% { transform: translateY(-8px); }
   100% { transform: translateY(0px); }
+`;
+
+const modalFadeIn = keyframes`
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 `;
 
 
@@ -67,7 +78,6 @@ const Headline = styled.h1`
   line-height: 1.1;
   letter-spacing: -0.04em;
   
-  // Staggered animation for each line/word
   & > div {
     opacity: 0;
     animation: ${fadeInUp} 1s ease-out forwards;
@@ -93,10 +103,8 @@ const HighlightedText = styled.span`
   padding: 0.2em 0.5em;
   border-radius: 30px;
   margin-left: 0.2em;
-  
-  // UPDATED: Added animation
   animation: ${textFloat} 4s ease-in-out infinite;
-  animation-delay: 1s; // Start after the initial fade-in
+  animation-delay: 1s;
 
   @media (max-width: 768px) {
     border-radius: 20px;
@@ -129,19 +137,44 @@ const CTAButton = styled.button`
   border: none;
   border-radius: 50px;
   cursor: pointer;
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
   margin-top: 2rem;
   margin-left: 0.5rem;
   opacity: 0;
   animation: ${fadeInUp} 1s 0.7s ease-out forwards;
+  position: relative;
+  overflow: hidden;
+  z-index: 1;
+  transition: transform 0.3s ease, box-shadow 0.3s ease, color 0.3s ease;
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: #7c3aed;
+    transform: translateX(-101%);
+    transition: transform 0.4s cubic-bezier(0.77, 0, 0.175, 1);
+    z-index: -1;
+  }
 
   &:hover {
     transform: translateY(-3px);
-    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 10px 20px rgba(124, 58, 237, 0.25);
+    
+    &::after {
+      transform: translateX(0);
+    }
   }
 
   svg {
     margin-left: 0.5rem;
+    transition: transform 0.3s ease;
+  }
+
+  &:hover svg {
+    transform: translateX(5px);
   }
 `;
 
@@ -183,42 +216,143 @@ const CircularText = styled.div`
   }
 `;
 
+// --- NEW MODAL STYLES ---
+const ModalOverlay = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  backdrop-filter: blur(5px);
+`;
+
+const ModalContainer = styled.div`
+  background: #ffffff;
+  padding: 2.5rem;
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  width: 90%;
+  max-width: 450px;
+  text-align: center;
+  animation: ${modalFadeIn} 0.3s ease-out;
+`;
+
+const ModalDescription = styled.p`
+  font-size: 1.1rem;
+  color: #4b5563;
+  line-height: 1.6;
+  margin: 0;
+  margin-bottom: 2rem;
+`;
+
+const ButtonContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+`;
+
+const ModalButton = styled.button`
+  padding: 0.9rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.2s ease, background-color 0.2s ease;
+
+  &:hover {
+    transform: translateY(-2px);
+  }
+`;
+
+const LoginModalButton = styled(ModalButton)`
+  background: #1c1c1c;
+  color: #fff;
+  
+  &:hover {
+    background: #3a3a3a;
+  }
+`;
+
+const ContinueModalButton = styled(ModalButton)`
+  background: #f3f4f6;
+  color: #1c1c1c;
+  border: 1px solid #e5e7eb;
+
+  &:hover {
+    background: #e5e7eb;
+  }
+`;
+
 
 // The Hero Component
 const Hero = () => {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const navigate = useNavigate();
+
+  const handleLoginRedirect = () => {
+    navigate('/login');
+    setIsModalOpen(false);
+  };
+
+  const handleGuestRedirect = () => {
+    navigate('/templates');
+    setIsModalOpen(false);
+  };
+
   return (
-    <HeroWrapper>
-      <Navbar/>
-      <ContentContainer>
-        <Headline>
-          <div>Digital Receipts,</div>
-          <div><HighlightedText>Beautifully</HighlightedText></div>
-          <div>Simple.</div>
-        </Headline>
-        <Subheadline>
-          GenSlip is the effortless way to create, manage, and send professional-grade digital slips.
-        </Subheadline>
-        <CTAButton>
-          Start Creating <ArrowRight size={20} />
-        </CTAButton>
-      </ContentContainer>
+    <>
+      <HeroWrapper>
+        <Navbar/>
+        <ContentContainer>
+          <Headline>
+            <div>Digital Receipts,</div>
+            <div><HighlightedText>Beautifully</HighlightedText></div>
+            <div>Simple.</div>
+          </Headline>
+          <Subheadline>
+            GenSlip is the effortless way to create, manage, and send professional-grade digital slips.
+          </Subheadline>
+          <CTAButton onClick={() => setIsModalOpen(true)}>
+            Start Creating <ArrowRight size={20} />
+          </CTAButton>
+        </ContentContainer>
 
-      <FloatingIcon><FileText size={40} /></FloatingIcon>
-      <FloatingIcon><Zap size={50} /></FloatingIcon>
-      <FloatingIcon><CheckCircle size={30} /></FloatingIcon>
-      
-      <CircularText>
-        <svg viewBox="0 0 100 100">
-          <path d="M 0,50 a 50,50 0 1,1 0,1 z" id="circlePath" fill="none"/>
-          <text>
-            <textPath href="#circlePath">
-              • FAST & EASY • GENSLIP • FAST & EASY
-            </textPath>
-          </text>
-        </svg>
-      </CircularText>
+        <FloatingIcon><FileText size={40} /></FloatingIcon>
+        <FloatingIcon><Zap size={50} /></FloatingIcon>
+        <FloatingIcon><CheckCircle size={30} /></FloatingIcon>
+        
+        <CircularText>
+          <svg viewBox="0 0 100 100">
+            <path d="M 0,50 a 50,50 0 1,1 0,1 z" id="circlePath" fill="none"/>
+            <text>
+              <textPath href="#circlePath">
+                • FAST & EASY • GENSLIP • FAST & EASY
+              </textPath>
+            </text>
+          </svg>
+        </CircularText>
+      </HeroWrapper>
 
-    </HeroWrapper>
+      {isModalOpen && (
+        <ModalOverlay onClick={() => setIsModalOpen(false)}>
+          <ModalContainer onClick={(e) => e.stopPropagation()}>
+            <ModalDescription>
+              Log in to save your details and templates.
+            </ModalDescription>
+            <ButtonContainer>
+              <LoginModalButton onClick={handleLoginRedirect}>Login</LoginModalButton>
+              <ContinueModalButton onClick={handleGuestRedirect}>Continue without Logging In</ContinueModalButton>
+            </ButtonContainer>
+          </ModalContainer>
+        </ModalOverlay>
+      )}
+    </>
   );
 };
 

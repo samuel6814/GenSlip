@@ -49,21 +49,32 @@ const spinAnimation = keyframes`
   }
 `;
 
-// --- Global Styles for Printing ---
-const PrintStyles = createGlobalStyle`
+// --- Global Styles ---
+// This is the key for responsive layouts. It ensures padding and borders are included
+// in the element's total width and height, preventing unexpected overflow.
+const GlobalStyles = createGlobalStyle`
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
   @media print {
     body * {
       visibility: hidden;
     }
-    #receipt-preview, #receipt-preview * {
+    #printable-receipt, #printable-receipt * {
       visibility: visible;
     }
-    #receipt-preview {
+    #printable-receipt {
       position: absolute;
       left: 0;
       top: 0;
       width: 100%;
-      max-width: 100%;
       margin: 0;
       padding: 0;
       box-shadow: none;
@@ -76,15 +87,22 @@ const PrintStyles = createGlobalStyle`
 
 const EditorWrapper = styled.div`
   display: grid;
+  // The grid switches from two columns to one on medium-sized screens.
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-  gap: 3rem;
-  padding: 4rem 2rem;
+  gap: 2rem;
+  padding: 2rem;
   align-items: start;
   min-height: 100vh;
   background-color: #e2e1de;
 
   @media (max-width: 1024px) {
     grid-template-columns: 1fr;
+    gap: 2rem;
+    padding: 2rem 1rem;
+  }
+
+  @media (max-width: 768px) {
+    padding: 1rem;
   }
 `;
 
@@ -92,15 +110,21 @@ const FormsColumn = styled.div`
   display: flex;
   flex-direction: column;
   gap: 2rem;
+  // Ensures this column doesn't create overflow.
+  min-width: 0;
 `;
 
 const FormSection = styled.div`
   width: 100%;
   background-color: #f5f4f2;
-  padding: 2.5rem;
+  padding: 2rem;
   border-radius: 24px;
   box-shadow: 0 16px 40px rgba(0,0,0,0.08);
   animation: ${slideDown} 0.5s ease-out;
+
+  @media (max-width: 768px) {
+    padding: 1.5rem;
+  }
 `;
 
 const SectionHeader = styled.div`
@@ -121,18 +145,25 @@ const SectionNumber = styled.div`
   justify-content: center;
   font-weight: 700;
   font-size: 1.25rem;
+  flex-shrink: 0;
 `;
 
 const SectionTitle = styled.h2`
-  font-size: 2rem;
+  font-size: 1.75rem;
   font-weight: 600;
   color: #1c1c1c;
   margin: 0;
+
+  @media (max-width: 768px) {
+    font-size: 1.5rem;
+  }
 `;
 
 const FormGroup = styled.div`
   position: relative;
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
+  // Prevents grid items from overflowing if their content is too wide.
+  min-width: 0;
 `;
 
 const FloatingLabel = styled.label`
@@ -143,6 +174,8 @@ const FloatingLabel = styled.label`
   font-size: 1rem;
   transition: all 0.2s ease;
   pointer-events: none;
+  // Prevents label text from wrapping.
+  white-space: nowrap; 
 `;
 
 const Input = styled.input`
@@ -159,6 +192,7 @@ const Input = styled.input`
     border-bottom-color: #7c3aed;
   }
   
+  // The :not(:placeholder-shown) selector is more robust for floating labels.
   &:focus + ${FloatingLabel},
   &:not(:placeholder-shown) + ${FloatingLabel} {
     top: -0.5rem;
@@ -222,6 +256,7 @@ const LogoPreview = styled.div`
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  flex-shrink: 0;
 
   img {
     width: 100%;
@@ -263,30 +298,55 @@ const ItemList = styled.div`
 
 const ItemRow = styled.div`
   display: grid;
-  grid-template-columns: 3fr 1fr 1fr 1fr 0.5fr;
+  // This grid layout is flexible for desktop.
+  grid-template-columns: 3fr 1fr 1fr 1fr auto;
   gap: 1rem;
   align-items: center;
   animation: ${slideDown} 0.4s ease-out;
 
+  // On tablets, we switch to a 2-column layout.
   @media (max-width: 768px) {
-    grid-template-columns: 1fr;
-    gap: 1.5rem;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
     padding: 1rem;
     border-radius: 8px;
     background-color: #e9e8e5;
+
+    // The item name spans the full width.
+    & > div:first-child {
+      grid-column: 1 / -1;
+    }
+    // The total and remove button align nicely at the bottom.
+    & > div:nth-child(4) {
+      grid-column: 1 / 2;
+    }
+    & > button:last-child {
+      grid-column: 2 / 3;
+      justify-self: end;
+    }
+  }
+
+  // On small mobile screens, everything stacks into a single column.
+  @media (max-width: 500px) {
+    grid-template-columns: 1fr;
+    & > div:first-child,
+    & > div:nth-child(4),
+    & > button:last-child {
+      grid-column: auto;
+    }
+    & > button:last-child {
+      justify-self: start; // Align button to the left in single column.
+    }
   }
 `;
 
 const TotalsRow = styled.div`
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  // This auto-fitting grid is great for responsiveness. It will wrap items
+  // onto new lines if they don't fit.
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 1rem;
   align-items: center;
-
-  @media (max-width: 768px) {
-    grid-template-columns: 1fr;
-    gap: 1.5rem;
-  }
 `;
 
 const RemoveButton = styled.button`
@@ -334,10 +394,8 @@ const ActionPanel = styled.div`
   display: flex;
   gap: 1rem;
   justify-content: center;
-
-  @media (max-width: 768px) {
-    flex-direction: column;
-  }
+  // Stacks the buttons vertically on mobile.
+  flex-wrap: wrap;
 `;
 
 const ActionButton = styled.button`
@@ -354,6 +412,12 @@ const ActionButton = styled.button`
   border: 2px solid #1c1c1c;
   background-color: #1c1c1c;
   color: #fff;
+  // Allows buttons to grow and fit the available space.
+  flex-grow: 1; 
+
+  @media (min-width: 768px) {
+    flex-grow: 0; // Buttons have natural width on larger screens.
+  }
 
   &:hover {
     background-color: #7c3aed;
@@ -374,6 +438,7 @@ const ActionButton = styled.button`
     background-color: #999;
     border-color: #999;
     cursor: not-allowed;
+    transform: none;
   }
 `;
 
@@ -386,6 +451,13 @@ const PreviewPanel = styled.div`
   width: 100%;
   position: sticky;
   top: 2rem;
+
+  // On medium screens and below, the preview panel is no longer sticky
+  // and just sits in the normal document flow.
+  @media (max-width: 1024px) {
+    position: static;
+    top: auto;
+  }
 `;
 
 const ReceiptPreviewContainer = styled.div`
@@ -401,6 +473,10 @@ const ReceiptPreview = styled.div`
   padding: 1.5rem;
   border: 1px solid #eee;
   background: #fff;
+
+  @media (max-width: 768px) {
+    padding: 1rem;
+  }
 `;
 
 const ReceiptHeader = styled.header`
@@ -409,6 +485,8 @@ const ReceiptHeader = styled.header`
   
   img, svg {
     margin-bottom: 1rem;
+    max-width: 80px;
+    height: auto;
   }
 `;
 
@@ -422,6 +500,8 @@ const StoreInfo = styled.p`
   font-size: 0.8rem;
   line-height: 1.4;
   margin: 0.2rem 0;
+  // Allows long addresses to wrap nicely.
+  word-break: break-word;
 `;
 
 const ReceiptBody = styled.section`
@@ -434,6 +514,7 @@ const ReceiptBody = styled.section`
 const ReceiptItem = styled.div`
   display: flex;
   justify-content: space-between;
+  gap: 1rem;
   margin-bottom: 0.5rem;
   font-size: 0.8rem;
 `;
@@ -442,7 +523,7 @@ const ReceiptFooter = styled.footer`
   margin-top: 1.5rem;
 `;
 
-const TotalRow = styled.div`
+const TotalFooterRow = styled.div`
   display: flex;
   justify-content: space-between;
   font-size: 0.9rem;
@@ -474,6 +555,7 @@ const Switch = styled.label`
   display: inline-block;
   width: 44px;
   height: 24px;
+  flex-shrink: 0;
 
   input {
     opacity: 0;
@@ -579,7 +661,7 @@ const ReceiptEditor = () => {
 
   const handleDownloadPDF = () => {
     setIsDownloading(true);
-    const input = document.getElementById('receipt-preview-content');
+    const input = document.getElementById('printable-receipt');
     
     html2canvas(input, { scale: 2, useCORS: true })
       .then((canvas) => {
@@ -587,7 +669,7 @@ const ReceiptEditor = () => {
         const pdf = new jsPDF({
           orientation: 'portrait',
           unit: 'pt',
-          format: [canvas.width * 0.75, canvas.height * 0.75] // A bit of scaling
+          format: [canvas.width * 0.75, canvas.height * 0.75]
         });
         pdf.addImage(imgData, 'PNG', 0, 0, canvas.width * 0.75, canvas.height * 0.75);
         pdf.save(`receipt-${Date.now()}.pdf`);
@@ -615,7 +697,7 @@ const ReceiptEditor = () => {
   );
 
   const grandTotal = useMemo(() => 
-    subtotal + taxAmount + vatAmount - parseFloat(receipt.discount),
+    subtotal + taxAmount + vatAmount - parseFloat(receipt.discount || 0),
     [subtotal, taxAmount, vatAmount, receipt.discount]
   );
   
@@ -625,7 +707,7 @@ const ReceiptEditor = () => {
 
   return (
     <>
-      <PrintStyles />
+      <GlobalStyles />
       <EditorWrapper>
         <FormsColumn>
           {/* Store Details Section */}
@@ -660,7 +742,7 @@ const ReceiptEditor = () => {
                 <FloatingLabel htmlFor="address">Address</FloatingLabel>
               </InputWrapper>
             </FormGroup>
-            <FormGroup>
+            <FormGroup style={{marginBottom: 0}}>
               <InputWrapper>
                 <Phone size={18} />
                 <Input id="phone" name="phone" value={receipt.phone} onChange={handleInputChange} placeholder=" " />
@@ -786,12 +868,13 @@ const ReceiptEditor = () => {
         </FormsColumn>
 
         <PreviewPanel>
-          <ReceiptPreviewContainer id="receipt-preview">
-            <ReceiptPreview id="receipt-preview-content">
+          <ReceiptPreviewContainer id="printable-receipt">
+            <ReceiptPreview>
               <ReceiptHeader>
-                {receipt.logo ? <img src={receipt.logo} alt="Brand Logo" width="80" /> : <Logo size={60} />}
+                {receipt.logo ? <img src={receipt.logo} alt="Brand Logo" /> : <Logo size={60} />}
                 <BrandName>{receipt.brandName}</BrandName>
                 <StoreInfo>{receipt.address}</StoreInfo>
+                <StoreInfo>{receipt.phone}</StoreInfo>
               </ReceiptHeader>
               <ReceiptBody>
                 {receipt.items.map(item => (
@@ -802,28 +885,28 @@ const ReceiptEditor = () => {
                 ))}
               </ReceiptBody>
               <ReceiptFooter>
-                <TotalRow>
+                <TotalFooterRow>
                   <span>Subtotal</span>
                   <span>{receipt.currency}{subtotal.toFixed(2)}</span>
-                </TotalRow>
-                <TotalRow>
+                </TotalFooterRow>
+                <TotalFooterRow>
                   <span>Tax/VAT ({receipt.taxRate}%)</span>
                   <span>{receipt.currency}{taxAmount.toFixed(2)}</span>
-                </TotalRow>
-                 <TotalRow>
+                </TotalFooterRow>
+                 <TotalFooterRow>
                   <span>Levy/NHIL ({receipt.vatRate}%)</span>
                   <span>{receipt.currency}{vatAmount.toFixed(2)}</span>
-                </TotalRow>
+                </TotalFooterRow>
                 {receipt.discount > 0 && (
-                  <TotalRow>
+                  <TotalFooterRow>
                     <span>Discount</span>
                     <span>-{receipt.currency}{parseFloat(receipt.discount).toFixed(2)}</span>
-                  </TotalRow>
+                  </TotalFooterRow>
                 )}
-                <TotalRow className="grand-total">
+                <TotalFooterRow className="grand-total">
                   <span>Total</span>
                   <span>{receipt.currency}{finalTotal.toFixed(2)}</span>
-                </TotalRow>
+                </TotalFooterRow>
               </ReceiptFooter>
             </ReceiptPreview>
           </ReceiptPreviewContainer>

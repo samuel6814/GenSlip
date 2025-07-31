@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import styled, { css } from 'styled-components';
 import { Menu, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 // Styled Components
 const NavWrapper = styled.nav`
@@ -85,13 +86,13 @@ const NavLink = styled.a`
   }
 `;
 
-const CTAButton = styled.a`
+const LoginButton = styled.a`
   padding: 0.75rem 1.5rem;
   font-size: 1rem;
   font-weight: 600;
   color: #fff;
   background: #1c1c1c;
-  border: none;
+  border: 2px solid #1c1c1c;
   border-radius: 50px;
   cursor: pointer;
   text-decoration: none;
@@ -100,6 +101,7 @@ const CTAButton = styled.a`
   &:hover {
     transform: translateY(-2px);
     background-color: #7c3aed;
+    border-color: #7c3aed;
   }
 `;
 
@@ -119,7 +121,8 @@ const MobileNavMenu = styled.div`
   left: 0;
   width: 100%;
   height: 100%;
-  background: #f8f7f4;
+  z-index: 999; 
+  background: #7c3aed;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -130,6 +133,29 @@ const MobileNavMenu = styled.div`
   
   ${NavLink} {
     font-size: 2rem;
+    color: #fff;
+
+    &:after {
+        background-color: #fff;
+    }
+
+    &:hover {
+        color: #fff;
+    }
+  }
+
+  ${LoginButton} {
+    font-size: 1.5rem;
+    padding: 1rem 2rem;
+    background-color: #fff;
+    color: #7c3aed;
+    border-color: #fff;
+
+    &:hover {
+        transform: translateY(-2px);
+        background-color: #f0f0f0;
+        border-color: #f0f0f0;
+    }
   }
 `;
 
@@ -147,7 +173,6 @@ const Navbar = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
   
-  // Prevent scrolling when mobile menu is open
   useEffect(() => {
     if (isMenuOpen) {
       document.body.style.overflow = 'hidden';
@@ -163,23 +188,19 @@ const Navbar = () => {
           <Logo href="#">GenSlip</Logo>
           
           <NavLinks>
-            <NavLink href="#features">Features</NavLink>
-            <NavLink href="#pricing">Pricing</NavLink>
-            <NavLink href="#templates">Templates</NavLink>
-            <CTAButton href="#login">Get Started</CTAButton>
+            <NavLink href="/templates">Templates</NavLink>
+            <LoginButton href="/login">Login</LoginButton>
           </NavLinks>
 
           <MobileMenuIcon onClick={() => setIsMenuOpen(!isMenuOpen)}>
-            {isMenuOpen ? <X size={28} color="#1c1c1c" /> : <Menu size={28} color="#1c1c1c" />}
+            {isMenuOpen ? <X size={28} color="#fff" /> : <Menu size={28} color="#1c1c1c" />}
           </MobileMenuIcon>
         </NavContent>
       </NavWrapper>
 
       <MobileNavMenu $isOpen={isMenuOpen}>
-          <NavLink href="#features" onClick={() => setIsMenuOpen(false)}>Features</NavLink>
-          <NavLink href="#pricing" onClick={() => setIsMenuOpen(false)}>Pricing</NavLink>
-          <NavLink href="#templates" onClick={() => setIsMenuOpen(false)}>Templates</NavLink>
-          <CTAButton href="#login" onClick={() => setIsMenuOpen(false)}>Get Started</CTAButton>
+          <NavLink href="/templates" onClick={() => setIsMenuOpen(false)}>Templates</NavLink>
+          <LoginButton href="/login" onClick={() => setIsMenuOpen(false)}>Login</LoginButton>
       </MobileNavMenu>
     </>
   );
