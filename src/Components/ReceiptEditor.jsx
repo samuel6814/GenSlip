@@ -1,13 +1,15 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import styled, { keyframes, createGlobalStyle } from 'styled-components';
 import { 
   Upload, Building, Phone, 
   Plus, Trash2, Package, Hash, DollarSign, Percent,
-  Printer, Download, ArrowRight, ChevronsUpDown, Loader
+  Printer, Download, ArrowLeft, ChevronsUpDown, Loader, Save, CheckCircle, AlertCircle
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-
+// --- FIREBASE IMPORTS ---
+import { db } from './../Firebase';
+import { doc, setDoc } from "firebase/firestore";
 
 // Reusable SVG Logo Component
 const Logo = ({ size = 80 }) => (
@@ -40,6 +42,17 @@ const slideDown = keyframes`
   }
 `;
 
+const toastIn = keyframes`
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+`;
+
 const spinAnimation = keyframes`
   from {
     transform: rotate(0deg);
@@ -50,8 +63,6 @@ const spinAnimation = keyframes`
 `;
 
 // --- Global Styles ---
-// This is the key for responsive layouts. It ensures padding and borders are included
-// in the element's total width and height, preventing unexpected overflow.
 const GlobalStyles = createGlobalStyle`
   *, *::before, *::after {
     box-sizing: border-box;
@@ -87,7 +98,6 @@ const GlobalStyles = createGlobalStyle`
 
 const EditorWrapper = styled.div`
   display: grid;
-  // The grid switches from two columns to one on medium-sized screens.
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
   gap: 2rem;
   padding: 2rem;
@@ -110,7 +120,6 @@ const FormsColumn = styled.div`
   display: flex;
   flex-direction: column;
   gap: 2rem;
-  // Ensures this column doesn't create overflow.
   min-width: 0;
 `;
 
@@ -162,7 +171,6 @@ const SectionTitle = styled.h2`
 const FormGroup = styled.div`
   position: relative;
   margin-bottom: 1.5rem;
-  // Prevents grid items from overflowing if their content is too wide.
   min-width: 0;
 `;
 
@@ -174,7 +182,6 @@ const FloatingLabel = styled.label`
   font-size: 1rem;
   transition: all 0.2s ease;
   pointer-events: none;
-  // Prevents label text from wrapping.
   white-space: nowrap; 
 `;
 
@@ -192,13 +199,17 @@ const Input = styled.input`
     border-bottom-color: #7c3aed;
   }
   
-  // The :not(:placeholder-shown) selector is more robust for floating labels.
   &:focus + ${FloatingLabel},
   &:not(:placeholder-shown) + ${FloatingLabel} {
     top: -0.5rem;
     left: 2.5rem;
     font-size: 0.75rem;
     color: #7c3aed;
+  }
+
+  &:disabled {
+    background-color: #f0f0f0;
+    cursor: not-allowed;
   }
 `;
 
@@ -216,6 +227,11 @@ const Select = styled.select`
   &:focus {
     outline: none;
     border-bottom-color: #7c3aed;
+  }
+
+  &:disabled {
+    background-color: #f0f0f0;
+    cursor: not-allowed;
   }
 `;
 
@@ -298,13 +314,11 @@ const ItemList = styled.div`
 
 const ItemRow = styled.div`
   display: grid;
-  // This grid layout is flexible for desktop.
   grid-template-columns: 3fr 1fr 1fr 1fr auto;
   gap: 1rem;
   align-items: center;
   animation: ${slideDown} 0.4s ease-out;
 
-  // On tablets, we switch to a 2-column layout.
   @media (max-width: 768px) {
     grid-template-columns: 1fr 1fr;
     gap: 1rem;
@@ -312,11 +326,9 @@ const ItemRow = styled.div`
     border-radius: 8px;
     background-color: #e9e8e5;
 
-    // The item name spans the full width.
     & > div:first-child {
       grid-column: 1 / -1;
     }
-    // The total and remove button align nicely at the bottom.
     & > div:nth-child(4) {
       grid-column: 1 / 2;
     }
@@ -326,7 +338,6 @@ const ItemRow = styled.div`
     }
   }
 
-  // On small mobile screens, everything stacks into a single column.
   @media (max-width: 500px) {
     grid-template-columns: 1fr;
     & > div:first-child,
@@ -335,15 +346,13 @@ const ItemRow = styled.div`
       grid-column: auto;
     }
     & > button:last-child {
-      justify-self: start; // Align button to the left in single column.
+      justify-self: start;
     }
   }
 `;
 
 const TotalsRow = styled.div`
   display: grid;
-  // This auto-fitting grid is great for responsiveness. It will wrap items
-  // onto new lines if they don't fit.
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 1rem;
   align-items: center;
@@ -394,7 +403,6 @@ const ActionPanel = styled.div`
   display: flex;
   gap: 1rem;
   justify-content: center;
-  // Stacks the buttons vertically on mobile.
   flex-wrap: wrap;
 `;
 
@@ -412,11 +420,10 @@ const ActionButton = styled.button`
   border: 2px solid #1c1c1c;
   background-color: #1c1c1c;
   color: #fff;
-  // Allows buttons to grow and fit the available space.
   flex-grow: 1; 
 
   @media (min-width: 768px) {
-    flex-grow: 0; // Buttons have natural width on larger screens.
+    flex-grow: 0; 
   }
 
   &:hover {
@@ -452,8 +459,6 @@ const PreviewPanel = styled.div`
   position: sticky;
   top: 2rem;
 
-  // On medium screens and below, the preview panel is no longer sticky
-  // and just sits in the normal document flow.
   @media (max-width: 1024px) {
     position: static;
     top: auto;
@@ -500,7 +505,6 @@ const StoreInfo = styled.p`
   font-size: 0.8rem;
   line-height: 1.4;
   margin: 0.2rem 0;
-  // Allows long addresses to wrap nicely.
   word-break: break-word;
 `;
 
@@ -596,22 +600,73 @@ const Switch = styled.label`
   }
 `;
 
+const ToastWrapper = styled.div`
+    position: fixed;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 1rem 1.5rem;
+    border-radius: 8px;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    z-index: 3000;
+    animation: ${toastIn} 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+    background-color: ${props => props.type === 'success' ? '#27ae60' : '#c0392b'};
+`;
+
+const defaultReceiptState = {
+  brandName: 'Your Brand',
+  logo: null,
+  address: '123 Main Street, Anytown',
+  phone: '(123) 456-7890',
+  items: [{ id: Date.now(), name: 'Sample Item', quantity: 2, price: 12.50 }],
+  taxRate: 15,
+  vatRate: 2.5,
+  discount: 5,
+  currency: 'GH₵',
+  totalOverride: '',
+  isManualTotal: false,
+};
+
+
 // --- The Main Editor Component ---
-const ReceiptEditor = () => {
+const ReceiptEditor = ({ user, existingReceipt = null, isReadOnly = false, onBack = null }) => {
   const [isDownloading, setIsDownloading] = useState(false);
-  const [receipt, setReceipt] = useState({
-    brandName: 'Your Brand',
-    logo: null,
-    address: '123 Main Street, Anytown',
-    phone: '(123) 456-7890',
-    items: [{ id: 1, name: 'Sample Item', quantity: 2, price: 12.50 }],
-    taxRate: 15,
-    vatRate: 2.5,
-    discount: 5,
-    currency: 'GH₵',
-    totalOverride: '',
-    isManualTotal: false,
-  });
+  const [isSaving, setIsSaving] = useState(false);
+  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+  const [receipt, setReceipt] = useState(existingReceipt || defaultReceiptState);
+
+  // --- NEW: Effect to fix scrolling on mobile ---
+  useEffect(() => {
+    // When the editor is opened, ensure the body is scrollable.
+    document.body.style.overflow = 'auto';
+  }, []);
+
+  // Effect to load existing receipt data when the component mounts or props change
+  useEffect(() => {
+    if (existingReceipt) {
+      setReceipt(existingReceipt);
+    } else {
+      // If there's no existing receipt, reset to default state
+      setReceipt(defaultReceiptState);
+    }
+  }, [existingReceipt]);
+
+  // Effect to hide the toast after a few seconds
+  useEffect(() => {
+    if (toast.show) {
+        const timer = setTimeout(() => {
+            setToast({ show: false, message: '', type: 'success' });
+        }, 3000);
+        return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
+  const showToast = (message, type = 'success') => {
+    setToast({ show: true, message, type });
+  };
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -681,6 +736,32 @@ const ReceiptEditor = () => {
       });
   };
 
+  const handleSaveOrUpdateReceipt = async () => {
+    if (!user) {
+        showToast("Please log in to save your receipt.", "error");
+        return;
+    }
+    setIsSaving(true);
+    
+    // If it's an existing receipt, we use its ID. Otherwise, create a new one.
+    const receiptId = existingReceipt?.firestoreId || `receipt-${Date.now()}`;
+    const receiptRef = doc(db, 'users', user.uid, 'receipts', receiptId);
+    
+    try {
+        await setDoc(receiptRef, { ...receipt, id: receiptId, savedAt: new Date() }, { merge: true });
+        showToast(existingReceipt ? "Receipt updated successfully!" : "Receipt saved successfully!");
+        if (!existingReceipt) {
+            // If it's a new receipt, reset the form after saving
+            setReceipt(defaultReceiptState);
+        }
+    } catch (error) {
+        console.error("Error saving receipt: ", error);
+        showToast("Failed to save receipt. Please try again.", "error");
+    } finally {
+        setIsSaving(false);
+    }
+  };
+
   const subtotal = useMemo(() => 
     receipt.items.reduce((sum, item) => sum + (item.quantity * item.price), 0),
     [receipt.items]
@@ -708,6 +789,12 @@ const ReceiptEditor = () => {
   return (
     <>
       <GlobalStyles />
+      {toast.show && (
+        <ToastWrapper type={toast.type}>
+          {toast.type === 'success' ? <CheckCircle size={20} /> : <AlertCircle size={20} />}
+          {toast.message}
+        </ToastWrapper>
+      )}
       <EditorWrapper>
         <FormsColumn>
           {/* Store Details Section */}
@@ -724,28 +811,28 @@ const ReceiptEditor = () => {
                 <UploadButton>
                   <Upload size={16} />
                   Upload Logo
-                  <input type="file" accept="image/png, image/jpeg, image/svg+xml" onChange={handleLogoUpload} />
+                  <input type="file" accept="image/png, image/jpeg, image/svg+xml" onChange={handleLogoUpload} disabled={isReadOnly} />
                 </UploadButton>
               </div>
             </LogoUploader>
             <FormGroup>
               <InputWrapper>
                 <Building size={18} />
-                <Input id="brandName" name="brandName" value={receipt.brandName} onChange={handleInputChange} placeholder=" " />
+                <Input id="brandName" name="brandName" value={receipt.brandName} onChange={handleInputChange} placeholder=" " disabled={isReadOnly} />
                 <FloatingLabel htmlFor="brandName">Brand Name</FloatingLabel>
               </InputWrapper>
             </FormGroup>
             <FormGroup>
               <InputWrapper>
                 <Building size={18} />
-                <Input id="address" name="address" value={receipt.address} onChange={handleInputChange} placeholder=" " />
+                <Input id="address" name="address" value={receipt.address} onChange={handleInputChange} placeholder=" " disabled={isReadOnly} />
                 <FloatingLabel htmlFor="address">Address</FloatingLabel>
               </InputWrapper>
             </FormGroup>
             <FormGroup style={{marginBottom: 0}}>
               <InputWrapper>
                 <Phone size={18} />
-                <Input id="phone" name="phone" value={receipt.phone} onChange={handleInputChange} placeholder=" " />
+                <Input id="phone" name="phone" value={receipt.phone} onChange={handleInputChange} placeholder=" " disabled={isReadOnly} />
                 <FloatingLabel htmlFor="phone">Phone Number</FloatingLabel>
               </InputWrapper>
             </FormGroup>
@@ -763,30 +850,30 @@ const ReceiptEditor = () => {
                   <FormGroup style={{marginBottom: 0}}>
                     <InputWrapper>
                       <Package size={18} />
-                      <Input value={item.name} onChange={(e) => handleItemChange(item.id, 'name', e.target.value)} placeholder=" " />
+                      <Input value={item.name} onChange={(e) => handleItemChange(item.id, 'name', e.target.value)} placeholder=" " disabled={isReadOnly} />
                       <FloatingLabel>Item Name</FloatingLabel>
                     </InputWrapper>
                   </FormGroup>
                   <FormGroup style={{marginBottom: 0}}>
                     <InputWrapper>
                       <Hash size={18} />
-                      <Input type="number" value={item.quantity} onChange={(e) => handleItemChange(item.id, 'quantity', parseFloat(e.target.value) || 0)} placeholder=" " />
+                      <Input type="number" value={item.quantity} onChange={(e) => handleItemChange(item.id, 'quantity', parseFloat(e.target.value) || 0)} placeholder=" " disabled={isReadOnly} />
                       <FloatingLabel>Qty</FloatingLabel>
                     </InputWrapper>
                   </FormGroup>
                   <FormGroup style={{marginBottom: 0}}>
                     <InputWrapper>
                       <DollarSign size={18} />
-                      <Input type="number" value={item.price} onChange={(e) => handleItemChange(item.id, 'price', parseFloat(e.target.value) || 0)} placeholder=" " />
+                      <Input type="number" value={item.price} onChange={(e) => handleItemChange(item.id, 'price', parseFloat(e.target.value) || 0)} placeholder=" " disabled={isReadOnly} />
                       <FloatingLabel>Price</FloatingLabel>
                     </InputWrapper>
                   </FormGroup>
                   <div>{receipt.currency}{(item.quantity * item.price).toFixed(2)}</div>
-                  <RemoveButton onClick={() => handleRemoveItem(item.id)}><Trash2 size={20} /></RemoveButton>
+                  <RemoveButton onClick={() => handleRemoveItem(item.id)} disabled={isReadOnly}><Trash2 size={20} /></RemoveButton>
                 </ItemRow>
               ))}
             </ItemList>
-            <AddItemButton onClick={handleAddItem}><Plus size={18}/> Add Item</AddItemButton>
+            <AddItemButton onClick={handleAddItem} disabled={isReadOnly}><Plus size={18}/> Add Item</AddItemButton>
           </FormSection>
 
           {/* Totals & Currency Section */}
@@ -799,21 +886,21 @@ const ReceiptEditor = () => {
                 <FormGroup style={{marginBottom: 0}}>
                     <InputWrapper>
                         <Percent size={18} />
-                        <Input type="number" name="taxRate" value={receipt.taxRate} onChange={handleInputChange} placeholder=" " />
+                        <Input type="number" name="taxRate" value={receipt.taxRate} onChange={handleInputChange} placeholder=" " disabled={isReadOnly} />
                         <FloatingLabel>Tax/VAT (%)</FloatingLabel>
                     </InputWrapper>
                 </FormGroup>
                 <FormGroup style={{marginBottom: 0}}>
                     <InputWrapper>
                         <Percent size={18} />
-                        <Input type="number" name="vatRate" value={receipt.vatRate} onChange={handleInputChange} placeholder=" " />
+                        <Input type="number" name="vatRate" value={receipt.vatRate} onChange={handleInputChange} placeholder=" " disabled={isReadOnly} />
                         <FloatingLabel>Levy/NHIL (%)</FloatingLabel>
                     </InputWrapper>
                 </FormGroup>
                 <FormGroup style={{marginBottom: 0}}>
                     <InputWrapper>
                         <DollarSign size={18} />
-                        <Input type="number" name="discount" value={receipt.discount} onChange={handleInputChange} placeholder=" " />
+                        <Input type="number" name="discount" value={receipt.discount} onChange={handleInputChange} placeholder=" " disabled={isReadOnly} />
                         <FloatingLabel>Discount</FloatingLabel>
                     </InputWrapper>
                 </FormGroup>
@@ -822,7 +909,7 @@ const ReceiptEditor = () => {
                 <FormGroup style={{marginBottom: 0}}>
                     <InputWrapper>
                         <DollarSign size={18} />
-                        <Select name="currency" value={receipt.currency} onChange={handleInputChange}>
+                        <Select name="currency" value={receipt.currency} onChange={handleInputChange} disabled={isReadOnly}>
                             <option value="GH₵">GH₵ (Ghana Cedi)</option>
                             <option value="$">$ (US Dollar)</option>
                             <option value="€">€ (Euro)</option>
@@ -834,7 +921,7 @@ const ReceiptEditor = () => {
                 <ToggleSwitchWrapper>
                     <label htmlFor="isManualTotal">Override Total</label>
                     <Switch>
-                        <input type="checkbox" id="isManualTotal" name="isManualTotal" checked={receipt.isManualTotal} onChange={handleInputChange} />
+                        <input type="checkbox" id="isManualTotal" name="isManualTotal" checked={receipt.isManualTotal} onChange={handleInputChange} disabled={isReadOnly} />
                         <span></span>
                     </Switch>
                 </ToggleSwitchWrapper>
@@ -842,7 +929,7 @@ const ReceiptEditor = () => {
                     <FormGroup style={{marginBottom: 0}}>
                         <InputWrapper>
                             <DollarSign size={18} />
-                            <Input type="number" name="totalOverride" value={receipt.totalOverride} onChange={handleInputChange} placeholder=" " />
+                            <Input type="number" name="totalOverride" value={receipt.totalOverride} onChange={handleInputChange} placeholder=" " disabled={isReadOnly} />
                             <FloatingLabel>Manual Total</FloatingLabel>
                         </InputWrapper>
                     </FormGroup>
@@ -857,6 +944,17 @@ const ReceiptEditor = () => {
               <SectionTitle>Finalize & Export</SectionTitle>
             </SectionHeader>
             <ActionPanel>
+                {onBack && (
+                    <ActionButton onClick={onBack} className="secondary">
+                        <ArrowLeft size={18} /> Back to Dashboard
+                    </ActionButton>
+                )}
+                {!isReadOnly && (
+                    <ActionButton onClick={handleSaveOrUpdateReceipt} disabled={isSaving || isDownloading}>
+                      {isSaving ? <AnimatedLoader size={18}/> : <Save size={18}/>}
+                      {isSaving ? 'Saving...' : (existingReceipt ? 'Update Receipt' : 'Save Receipt')}
+                    </ActionButton>
+                )}
                 <ActionButton onClick={handlePrint} disabled={isDownloading}><Printer size={18}/> Print Receipt</ActionButton>
                 <ActionButton className="secondary" onClick={handleDownloadPDF} disabled={isDownloading}>
                   {isDownloading ? <AnimatedLoader size={18}/> : <Download size={18}/>}

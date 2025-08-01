@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import styled, { keyframes } from 'styled-components';
-import { Mail, Lock, Home, ArrowRight } from 'lucide-react';
+import { Mail, Lock, Home, ArrowRight, AlertCircle } from 'lucide-react';
+// Import Firebase auth functions
+import { getAuth, signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { app } from '../../Firebase'; 
 
 // --- QUOTES FOR THE SLIDER ---
 const quotes = [
@@ -130,11 +133,7 @@ const RightPanel = styled.div`
   padding: 1rem 1.5rem; /* Base padding for mobile */
   position: relative;
   background-color: #e2e1de;
-  /* REMOVED min-height: 100vh; to prevent overflow */
-  
-  @media (min-width: 992px) {
-    padding: 3rem;
-  }
+  overflow-y: auto;
 `;
 
 const HomeLink = styled.a`
@@ -243,6 +242,11 @@ const LoginButton = styled.button`
     transform: translateY(-3px);
     box-shadow: 0 7px 20px rgba(124, 58, 237, 0.3);
   }
+
+  &:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+  }
   
   @media (min-width: 768px) {
     padding: 0.9rem;
@@ -298,6 +302,19 @@ const SignUpLink = styled.p`
   }
 `;
 
+const ErrorMessage = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: #fee2e2;
+  color: #b91c1c;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+  animation: ${slideInFromRight} 0.3s ease-out;
+`;
+
 const GoogleIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M21.35 11.1h-9.2v2.7h5.3c-.2 1.9-1.6 3.3-3.6 3.3c-2.2 0-4-1.8-4-4s1.8-4 4-4c1.1 0 2 .5 2.6 1.1l2.1-2.1C17.2 6.6 15.3 6 13.5 6c-3.6 0-6.5 2.9-6.5 6.5s2.9 6.5 6.5 6.5c3.4 0 6.2-2.7 6.2-6.2c0-.6-.1-1.1-.2-1.6z"/></svg>
 );
@@ -306,6 +323,13 @@ const GoogleIcon = () => (
 // --- The Login Page Component ---
 const LoginPage = () => {
   const [currentQuoteIndex, setCurrentQuoteIndex] = useState(0);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  const auth = getAuth(app);
+  const provider = new GoogleAuthProvider();
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -313,6 +337,43 @@ const LoginPage = () => {
     }, 8000); // 8 seconds to match animation duration
     return () => clearInterval(timer);
   }, []);
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError('');
+
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      console.log('Signed in as:', userCredential.user);
+      window.location.href = '/'; // <-- REDIRECT TO HOMEPAGE
+    } catch (error) {
+      const errorCode = error.code;
+      if (errorCode === 'auth/user-not-found' || errorCode === 'auth/wrong-password' || errorCode === 'auth/invalid-credential') {
+        setError('Invalid email or password. Please try again.');
+      } else {
+        setError('Failed to log in. Please try again later.');
+      }
+      console.error(error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setIsLoading(true);
+    setError('');
+    try {
+      const result = await signInWithPopup(auth, provider);
+      console.log('Signed in with Google:', result.user);
+      window.location.href = '/'; // <-- REDIRECT TO HOMEPAGE
+    } catch (error) {
+      setError('Failed to sign in with Google. Please try again.');
+      console.error(error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const currentQuote = quotes[currentQuoteIndex];
 
@@ -337,23 +398,44 @@ const LoginPage = () => {
         <LoginFormContainer>
           <Title>Welcome Back!</Title>
           <Subtitle>Log in to manage your receipts with ease.</Subtitle>
-          <form>
+
+          {error && (
+            <ErrorMessage>
+              <AlertCircle size={18} />
+              {error}
+            </ErrorMessage>
+          )}
+
+          <form onSubmit={handleLogin}>
             <FormGroup>
               <InputIcon><Mail size={18} /></InputIcon>
-              <Input type="email" placeholder="Email Address" required />
+              <Input 
+                type="email" 
+                placeholder="Email Address" 
+                required 
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
             </FormGroup>
             <FormGroup>
               <InputIcon><Lock size={18} /></InputIcon>
-              <Input type="password" placeholder="Password" required />
+              <Input 
+                type="password" 
+                placeholder="Password" 
+                required 
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
             </FormGroup>
-            <LoginButton type="submit">
-              Log In <ArrowRight size={20} />
+            <LoginButton type="submit" disabled={isLoading}>
+              {isLoading ? 'Logging In...' : 'Log In'}
+              {!isLoading && <ArrowRight size={20} />}
             </LoginButton>
           </form>
           
           <Divider>or</Divider>
 
-          <SocialLoginButton>
+          <SocialLoginButton onClick={handleGoogleLogin} disabled={isLoading}>
             <GoogleIcon />
             Continue with Google
           </SocialLoginButton>

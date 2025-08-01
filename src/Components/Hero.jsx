@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import Navbar from './Navbar'; // Assuming Navbar.jsx is in the same folder
+import Navbar from './Navbar'; 
 import styled, { keyframes } from 'styled-components';
 import { ArrowRight, FileText, CheckCircle, Zap } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 
 // Keyframes for animations
 const fadeInUp = keyframes`
@@ -34,7 +33,7 @@ const spin = keyframes`
 const textFloat = keyframes`
   0% { transform: translateY(0px); }
   50% { transform: translateY(-8px); }
-  100% { transform: translateY(0px); }
+  100% { translateY: (0px); }
 `;
 
 const modalFadeIn = keyframes`
@@ -256,6 +255,7 @@ const ButtonContainer = styled.div`
   gap: 1rem;
 `;
 
+// --- UPDATED: Changed from styled.a to styled.button
 const ModalButton = styled.button`
   padding: 0.9rem 1.5rem;
   font-size: 1rem;
@@ -264,6 +264,8 @@ const ModalButton = styled.button`
   border: none;
   cursor: pointer;
   transition: transform 0.2s ease, background-color 0.2s ease;
+  display: block;
+  width: 100%;
 
   &:hover {
     transform: translateY(-2px);
@@ -291,24 +293,29 @@ const ContinueModalButton = styled(ModalButton)`
 
 
 // The Hero Component
-const Hero = () => {
+const Hero = ({ user, navigate }) => { // <-- UPDATED: Accept the navigate prop
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const navigate = useNavigate();
 
-  const handleLoginRedirect = () => {
-    navigate('/login');
-    setIsModalOpen(false);
+  const handleStartCreating = () => {
+    if (user) {
+      // If user is logged in, navigate without a page reload
+      navigate('/templates');
+    } else {
+      // If user is not logged in, show the modal
+      setIsModalOpen(true);
+    }
   };
 
-  const handleGuestRedirect = () => {
-    navigate('/templates');
+  const handleModalNavigate = (path) => {
     setIsModalOpen(false);
-  };
+    navigate(path);
+  }
 
   return (
     <>
       <HeroWrapper>
-        <Navbar/>
+        {/* UPDATED: Pass user and navigate props to the Navbar */}
+        <Navbar user={user} navigate={navigate} />
         <ContentContainer>
           <Headline>
             <div>Digital Receipts,</div>
@@ -318,7 +325,7 @@ const Hero = () => {
           <Subheadline>
             GenSlip is the effortless way to create, manage, and send professional-grade digital slips.
           </Subheadline>
-          <CTAButton onClick={() => setIsModalOpen(true)}>
+          <CTAButton onClick={handleStartCreating}>
             Start Creating <ArrowRight size={20} />
           </CTAButton>
         </ContentContainer>
@@ -346,8 +353,9 @@ const Hero = () => {
               Log in to save your details and templates.
             </ModalDescription>
             <ButtonContainer>
-              <LoginModalButton onClick={handleLoginRedirect}>Login</LoginModalButton>
-              <ContinueModalButton onClick={handleGuestRedirect}>Continue without Logging In</ContinueModalButton>
+              {/* UPDATED: Use onClick with the navigate function */}
+              <LoginModalButton onClick={() => handleModalNavigate('/login')}>Login</LoginModalButton>
+              <ContinueModalButton onClick={() => handleModalNavigate('/templates')}>Continue without Logging In</ContinueModalButton>
             </ButtonContainer>
           </ModalContainer>
         </ModalOverlay>

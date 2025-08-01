@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import styled, { css } from 'styled-components';
-import { Menu, X } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Menu, X, LogOut } from 'lucide-react';
+import { getAuth, signOut } from 'firebase/auth';
+import { app } from "../Firebase"; // Make sure this path is correct
 
-// Styled Components
+// --- Styled Components ---
 const NavWrapper = styled.nav`
   position: fixed;
   top: 0;
@@ -40,31 +41,40 @@ const NavContent = styled.div`
   margin: 0 auto;
 `;
 
-const Logo = styled.a`
+const Logo = styled.button`
   font-size: 1.5rem;
   font-weight: 700;
   color: #1c1c1c;
   text-decoration: none;
   cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
 `;
 
 const NavLinks = styled.div`
   display: flex;
   align-items: center;
-  gap: 2.5rem;
+  gap: 1.5rem;
 
   @media (max-width: 768px) {
     display: none;
   }
 `;
 
-const NavLink = styled.a`
+// --- UPDATED: Changed from styled.a to styled.button
+const NavLink = styled.button`
   font-size: 1rem;
   font-weight: 500;
   color: #1c1c1c;
   text-decoration: none;
   position: relative;
   transition: color 0.3s ease;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
 
   &:after {
     content: '';
@@ -86,8 +96,34 @@ const NavLink = styled.a`
   }
 `;
 
-const LoginButton = styled.a`
-  padding: 0.75rem 1.5rem;
+const AuthButtons = styled.div`
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+`;
+
+// --- UPDATED: Changed from styled.a to styled.button
+const LoginButton = styled.button`
+  padding: 0.6rem 1.2rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1c1c1c;
+  background: transparent;
+  border: 2px solid transparent;
+  border-radius: 50px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.3s ease;
+  font-family: inherit;
+
+  &:hover {
+    background-color: #f0f0f0;
+  }
+`;
+
+// --- UPDATED: Changed from styled.a to styled.button
+const SignUpButton = styled.button`
+  padding: 0.6rem 1.2rem;
   font-size: 1rem;
   font-weight: 600;
   color: #fff;
@@ -97,6 +133,7 @@ const LoginButton = styled.a`
   cursor: pointer;
   text-decoration: none;
   transition: transform 0.3s ease, background-color 0.3s ease;
+  font-family: inherit;
 
   &:hover {
     transform: translateY(-2px);
@@ -105,10 +142,31 @@ const LoginButton = styled.a`
   }
 `;
 
+const LogoutButton = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.2rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #c72c41;
+  background: transparent;
+  border: 2px solid transparent;
+  border-radius: 50px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.3s ease;
+  font-family: inherit;
+
+  &:hover {
+    background-color: #fee2e2;
+  }
+`;
+
 const MobileMenuIcon = styled.div`
   display: none;
   cursor: pointer;
-  z-index: 1001;
+  z-index: 1001; /* Ensure icon is above the menu overlay */
 
   @media (max-width: 768px) {
     display: block;
@@ -144,31 +202,49 @@ const MobileNavMenu = styled.div`
     }
   }
 
-  ${LoginButton} {
+  ${LoginButton}, ${SignUpButton}, ${LogoutButton} {
     font-size: 1.5rem;
     padding: 1rem 2rem;
-    background-color: #fff;
     color: #7c3aed;
-    border-color: #fff;
+    background-color: #fff;
 
     &:hover {
-        transform: translateY(-2px);
         background-color: #f0f0f0;
-        border-color: #f0f0f0;
     }
+  }
+
+  ${LogoutButton} {
+      color: #c72c41;
+      &:hover {
+          background-color: #fee2e2;
+      }
   }
 `;
 
-// The Navbar Component
-const Navbar = () => {
+// --- The Navbar Component ---
+const Navbar = ({ user, navigate }) => { // <-- UPDATED: Accept navigate prop
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  const auth = getAuth(app);
+
+  const handleLogout = () => {
+    signOut(auth).then(() => {
+      // UPDATED: Use navigate instead of full page reload
+      navigate('/');
+    }).catch((error) => {
+      console.error("Logout Error:", error);
+    });
+  };
+
+  const handleMobileNav = (path) => {
+    navigate(path);
+    setIsMenuOpen(false);
+  };
 
   useEffect(() => {
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 10);
     };
-
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
@@ -185,11 +261,21 @@ const Navbar = () => {
     <>
       <NavWrapper $isScrolled={isScrolled}>
         <NavContent>
-          <Logo href="#">GenSlip</Logo>
+          <Logo onClick={() => navigate('/')}>GenSlip</Logo>
           
           <NavLinks>
-            <NavLink href="/templates">Templates</NavLink>
-            <LoginButton href="/login">Login</LoginButton>
+            <NavLink onClick={() => navigate('/templates')}>Templates</NavLink>
+            {user && <NavLink onClick={() => navigate('/dashboard')}>Dashboard</NavLink>}
+            {user ? (
+              <LogoutButton onClick={handleLogout}>
+                Logout <LogOut size={18} />
+              </LogoutButton>
+            ) : (
+              <AuthButtons>
+                <LoginButton onClick={() => navigate('/login')}>Login</LoginButton>
+                <SignUpButton onClick={() => navigate('/signup')}>Sign Up</SignUpButton>
+              </AuthButtons>
+            )}
           </NavLinks>
 
           <MobileMenuIcon onClick={() => setIsMenuOpen(!isMenuOpen)}>
@@ -199,8 +285,16 @@ const Navbar = () => {
       </NavWrapper>
 
       <MobileNavMenu $isOpen={isMenuOpen}>
-          <NavLink href="/templates" onClick={() => setIsMenuOpen(false)}>Templates</NavLink>
-          <LoginButton href="/login" onClick={() => setIsMenuOpen(false)}>Login</LoginButton>
+          <NavLink onClick={() => handleMobileNav('/templates')}>Templates</NavLink>
+          {user && <NavLink onClick={() => handleMobileNav('/dashboard')}>Dashboard</NavLink>}
+          {user ? (
+            <LogoutButton onClick={() => { handleLogout(); setIsMenuOpen(false); }}>Logout</LogoutButton>
+          ) : (
+            <>
+              <LoginButton onClick={() => handleMobileNav('/login')}>Login</LoginButton>
+              <SignUpButton onClick={() => handleMobileNav('/signup')}>Sign Up</SignUpButton>
+            </>
+          )}
       </MobileNavMenu>
     </>
   );

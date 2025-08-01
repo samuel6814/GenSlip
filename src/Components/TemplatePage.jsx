@@ -1,12 +1,17 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import styled, { keyframes, createGlobalStyle, ThemeProvider } from 'styled-components';
 import {
   Upload, Building, Phone,
   Plus, Trash2, Package, Hash, DollarSign, Percent,
-  Printer, Download, ArrowRight, ChevronsUpDown, Loader, Palette, X, Home, Save
+  Printer, Download, ArrowRight, ChevronsUpDown, Loader, Palette, X, Home, Save,
+  CheckCircle, AlertCircle
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+// --- FIREBASE IMPORTS ---
+import { db } from '../Firebase'; // Assuming firebase.jsx is in src folder
+import { doc, setDoc, collection, getDocs, deleteDoc } from "firebase/firestore"; // <-- ADDED deleteDoc
+
 
 // --- THEME DEFINITIONS FOR TEMPLATES ---
 
@@ -163,6 +168,17 @@ const slideDown = keyframes`
 const fadeIn = keyframes`
   from { opacity: 0; }
   to { opacity: 1; }
+`;
+
+const toastIn = keyframes`
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 `;
 
 
@@ -562,6 +578,16 @@ const ActionButton = styled.button`
       border-color: ${({ theme }) => theme.colors.subtle};
     }
   }
+  
+  &.danger {
+    background-color: #c0392b;
+    border-color: #c0392b;
+    color: #fff;
+    &:hover {
+      background-color: #e74c3c;
+      border-color: #e74c3c;
+    }
+  }
 
   &:disabled {
     opacity: 0.5;
@@ -777,8 +803,8 @@ const TemplateCard = styled.div`
   border-radius: ${({ theme }) => theme.borderRadius};
   box-shadow: 0 8px 30px rgba(0,0,0,0.1);
   overflow: hidden;
-  cursor: pointer;
   transition: transform 0.3s ease, box-shadow 0.3s ease, background-color 0.5s ease, color 0.5s ease;
+  position: relative; // Needed for positioning the delete button
 
   &:hover {
     transform: translateY(-5px);
@@ -791,6 +817,40 @@ const TemplateCard = styled.div`
         box-shadow: 0 16px 40px rgba(0,0,0,0.12);
       }
   }
+`;
+
+// --- NEW: Delete button for custom templates ---
+const DeleteTemplateButton = styled.button`
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    background: rgba(255, 255, 255, 0.7);
+    border: none;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #c0392b;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.3s ease, background-color 0.3s ease;
+    z-index: 5;
+
+    ${TemplateCard}:hover & {
+        opacity: 1;
+    }
+
+    &:hover {
+        background-color: #e74c3c;
+        color: #fff;
+    }
+`;
+
+
+const TemplateCardBody = styled.div`
+    cursor: pointer;
 `;
 
 const TemplatePreview = styled.div`
@@ -904,7 +964,7 @@ const CustomizerPanel = styled.div`
 const LivePreviewPanel = styled.div`
     padding: 1rem;
     overflow-y: auto;
-    display: flex;
+    display: none; /* Hidden on mobile */
     justify-content: center;
     align-items: flex-start;
 
@@ -922,8 +982,8 @@ const LivePreviewPanel = styled.div`
         position: static;
     }
 
-    @media (min-width: 768px) {
-        padding: 2rem;
+    @media (min-width: 1024px) {
+        display: flex;
     }
 `;
 
@@ -955,7 +1015,47 @@ const ColorInputWrapper = styled.div`
     }
 `;
 
-// --- NEW: Component for the Custom Template Creator Modal ---
+// --- NEW: Confirmation Modal for Deleting ---
+const ConfirmationModalContent = styled.div`
+    background: #fff;
+    padding: 2rem;
+    border-radius: 16px;
+    width: 90%;
+    max-width: 400px;
+    text-align: center;
+    animation: ${slideDown} 0.3s ease-out;
+
+    h3 {
+        margin-top: 0;
+        font-size: 1.5rem;
+    }
+
+    p {
+        color: #555;
+        margin-bottom: 2rem;
+    }
+`;
+
+
+// --- Toast Notification Component ---
+const ToastWrapper = styled.div`
+    position: fixed;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 1rem 1.5rem;
+    border-radius: 8px;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    z-index: 3000;
+    animation: ${toastIn} 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+    background-color: ${props => props.type === 'success' ? '#27ae60' : '#c0392b'};
+    font-family: 'Inter', sans-serif;
+`;
+
+// --- Component for the Custom Template Creator Modal ---
 const CustomTemplateCreatorModal = ({ template, onTemplateChange, onClose, onSave }) => {
     const { theme } = template;
 
@@ -1359,23 +1459,60 @@ const ReceiptEditor = ({ onBack, isPreview = false }) => {
 
 
 // --- The Main Page Component that handles the workflow (REVISED) ---
-const TemplatePage = () => {
+const TemplatePage = ({ user, navigate }) => {
     const [templates, setTemplates] = useState(initialTemplates);
     const [selectedTemplate, setSelectedTemplate] = useState(null);
     const [isCustomizerOpen, setIsCustomizerOpen] = useState(false);
+    const [isLoadingTemplates, setIsLoadingTemplates] = useState(true);
+    const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+    // --- NEW: State for delete confirmation ---
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [templateToDelete, setTemplateToDelete] = useState(null);
     
-    // Default state for a new custom template
     const [customTemplate, setCustomTemplate] = useState({
         id: 'custom',
         name: 'My Custom Design',
         description: 'A personalized receipt template.',
-        theme: { ...initialTemplates[0].theme } // Start with the classic theme as a base
+        theme: { ...initialTemplates[0].theme } 
     });
 
-    // A generic handler to update the nested state of the custom template
+    useEffect(() => {
+        const fetchUserTemplates = async () => {
+            if (user) {
+                try {
+                    const templatesCollectionRef = collection(db, 'users', user.uid, 'customTemplates');
+                    const querySnapshot = await getDocs(templatesCollectionRef);
+                    const userTemplates = querySnapshot.docs.map(doc => doc.data());
+                    setTemplates([...initialTemplates, ...userTemplates]);
+                } catch (error) {
+                    console.error("Error fetching user templates:", error);
+                    setTemplates(initialTemplates);
+                }
+            } else {
+                setTemplates(initialTemplates);
+            }
+            setIsLoadingTemplates(false);
+        };
+
+        fetchUserTemplates();
+    }, [user]);
+
+    useEffect(() => {
+        if (toast.show) {
+            const timer = setTimeout(() => {
+                setToast({ show: false, message: '', type: 'success' });
+            }, 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [toast]);
+
+    const showToast = (message, type = 'success') => {
+        setToast({ show: true, message, type });
+    };
+
     const handleCustomTemplateChange = (path, value) => {
         setCustomTemplate(prev => {
-            const newTemplate = JSON.parse(JSON.stringify(prev)); // Deep copy
+            const newTemplate = JSON.parse(JSON.stringify(prev));
             const keys = path.split('.');
             let current = newTemplate;
             for (let i = 0; i < keys.length - 1; i++) {
@@ -1386,15 +1523,57 @@ const TemplatePage = () => {
         });
     };
 
-    // Saves the new template, selects it, and closes the modal
-    const handleSaveCustomTemplate = () => {
+    const handleSaveCustomTemplate = async () => {
+        if (!user) {
+            showToast("Please log in to save custom templates.", "error");
+            return;
+        }
+
         const newTemplate = { ...customTemplate, id: `custom-${Date.now()}` };
-        setTemplates(prev => [...prev, newTemplate]);
-        setSelectedTemplate(newTemplate);
-        setIsCustomizerOpen(false);
+        
+        try {
+            const templateRef = doc(db, 'users', user.uid, 'customTemplates', newTemplate.id);
+            await setDoc(templateRef, newTemplate);
+            
+            setTemplates(prev => [...prev, newTemplate]);
+            setSelectedTemplate(newTemplate);
+            setIsCustomizerOpen(false);
+            showToast("Template saved successfully!");
+        } catch (error) {
+            console.error("Error saving template: ", error);
+            showToast("Failed to save template. Please try again.", "error");
+        }
     };
 
-    // Render the main editor if a template is selected
+    // --- NEW: Function to open the delete confirmation modal ---
+    const openDeleteModal = (template) => {
+        setTemplateToDelete(template);
+        setIsDeleteModalOpen(true);
+    };
+
+    // --- NEW: Function to handle the actual deletion ---
+    const handleDeleteTemplate = async () => {
+        if (!user || !templateToDelete) {
+            showToast("Could not delete template. User or template not found.", "error");
+            return;
+        }
+
+        try {
+            const templateRef = doc(db, 'users', user.uid, 'customTemplates', templateToDelete.id);
+            await deleteDoc(templateRef);
+
+            setTemplates(prev => prev.filter(t => t.id !== templateToDelete.id));
+            showToast("Template deleted successfully.");
+        } catch (error) {
+            console.error("Error deleting template: ", error);
+            showToast("Failed to delete template. Please try again.", "error");
+        } finally {
+            setIsDeleteModalOpen(false);
+            setTemplateToDelete(null);
+        }
+    };
+
+
     if (selectedTemplate) {
         return (
             <ThemeProvider theme={selectedTemplate.theme}>
@@ -1404,10 +1583,16 @@ const TemplatePage = () => {
         );
     }
 
-    // Render the template selection page if no template is selected
     return (
         <ThemeProvider theme={initialTemplates[0].theme}>
             <GlobalStyles />
+            {toast.show && (
+                <ToastWrapper type={toast.type}>
+                    {toast.type === 'success' ? <CheckCircle size={20} /> : <AlertCircle size={20} />}
+                    {toast.message}
+                </ToastWrapper>
+            )}
+
             {isCustomizerOpen && (
                 <CustomTemplateCreatorModal
                     template={customTemplate}
@@ -1416,46 +1601,86 @@ const TemplatePage = () => {
                     onSave={handleSaveCustomTemplate}
                 />
             )}
+            
+            {/* --- NEW: Confirmation Modal for Deletion --- */}
+            {isDeleteModalOpen && (
+                <ModalOverlay>
+                    <ConfirmationModalContent>
+                        <h3>Confirm Deletion</h3>
+                        <p>Are you sure you want to delete the template "{templateToDelete?.name}"? This action cannot be undone.</p>
+                        <ActionPanel>
+                            <ActionButton onClick={handleDeleteTemplate} className="danger">
+                                <Trash2 size={18} /> Yes, Delete
+                            </ActionButton>
+                            <ActionButton onClick={() => setIsDeleteModalOpen(false)} className="secondary">
+                                Cancel
+                            </ActionButton>
+                        </ActionPanel>
+                    </ConfirmationModalContent>
+                </ModalOverlay>
+            )}
+
             <TemplateSelectionWrapper>
                 <TemplateSelectionHeader>
-                    <h1>Choose a Template</h1>
-                    <p>Select a professionally designed template to start, or create your own from scratch.</p>
+                    {isLoadingTemplates ? (
+                        <h1>Loading Templates...</h1>
+                    ) : (
+                        <>
+                            <h1>Choose a Template</h1>
+                            <p>Select a professionally designed template to start, or create your own from scratch.</p>
+                        </>
+                    )}
                 </TemplateSelectionHeader>
-
+                
                 <ActionPanel style={{ justifyContent: 'center', marginBottom: '2rem' }}>
-                    <ActionButton as="a" href="/" className="secondary">
+                    <ActionButton onClick={() => navigate('/')} className="secondary">
                         <Home size={18}/> Home
                     </ActionButton>
                 </ActionPanel>
 
-                <TemplateGrid>
-                    {templates.map(template => (
-                        <ThemeProvider theme={template.theme} key={template.id}>
-                            <TemplateCard onClick={() => setSelectedTemplate(template)}>
-                                <TemplatePreview>
-                                    <MiniReceipt>
-                                        <b>{template.name}</b>
-                                        <hr />
-                                        <span>Item 1.....$10.00</span><br/>
-                                        <span>Item 2.....$15.00</span><br/>
-                                        <b>Total.......$25.00</b>
-                                    </MiniReceipt>
-                                </TemplatePreview>
-                                <TemplateInfo>
-                                    <h3>{template.name}</h3>
-                                    <p>{template.description}</p>
-                                </TemplateInfo>
-                            </TemplateCard>
-                        </ThemeProvider>
-                    ))}
-                    <CustomTemplateCard as="div" onClick={() => setIsCustomizerOpen(true)}>
-                         <TemplateInfo>
-                            <Palette size={40} style={{marginBottom: '1rem'}}/>
-                            <h3>Create Your Own</h3>
-                            <p>Design a unique receipt that matches your brand perfectly.</p>
-                        </TemplateInfo>
-                    </CustomTemplateCard>
-                </TemplateGrid>
+                {isLoadingTemplates ? (
+                    <div style={{textAlign: 'center'}}><AnimatedLoader size={40}/></div>
+                ) : (
+                    <TemplateGrid>
+                        {templates.map(template => (
+                            <ThemeProvider theme={template.theme} key={template.id}>
+                                <TemplateCard>
+                                    {/* --- NEW: Show delete button only for custom templates --- */}
+                                    {template.id.startsWith('custom-') && (
+                                        <DeleteTemplateButton onClick={(e) => {
+                                            e.stopPropagation(); // Prevent card click
+                                            openDeleteModal(template);
+                                        }}>
+                                            <Trash2 size={16}/>
+                                        </DeleteTemplateButton>
+                                    )}
+                                    <TemplateCardBody onClick={() => setSelectedTemplate(template)}>
+                                        <TemplatePreview>
+                                            <MiniReceipt>
+                                                <b>{template.name}</b>
+                                                <hr />
+                                                <span>Item 1.....$10.00</span><br/>
+                                                <span>Item 2.....$15.00</span><br/>
+                                                <b>Total.......$25.00</b>
+                                            </MiniReceipt>
+                                        </TemplatePreview>
+                                        <TemplateInfo>
+                                            <h3>{template.name}</h3>
+                                            <p>{template.description}</p>
+                                        </TemplateInfo>
+                                    </TemplateCardBody>
+                                </TemplateCard>
+                            </ThemeProvider>
+                        ))}
+                        <CustomTemplateCard as="div" onClick={() => setIsCustomizerOpen(true)}>
+                             <TemplateInfo>
+                                <Palette size={40} style={{marginBottom: '1rem'}}/>
+                                <h3>Create Your Own</h3>
+                                <p>Design a unique receipt that matches your brand perfectly.</p>
+                            </TemplateInfo>
+                        </CustomTemplateCard>
+                    </TemplateGrid>
+                )}
             </TemplateSelectionWrapper>
         </ThemeProvider>
     );
